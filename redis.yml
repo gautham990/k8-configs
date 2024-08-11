@@ -1,0 +1,91 @@
+# This is Redis sts in standalone mode. For a more complex HA setup use Sentinel 
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+type: Opaque
+data:
+  requirepass: c3VwZXJzZWNyZXRwYXNzd29yZA==    # supersecretpassword
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless-svc
+  labels:
+    app: redis
+spec:
+  ports:
+  - port: 6379
+    name: redis
+  clusterIP: None  
+  selector:
+    app: redis
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode no
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  serviceName: "redis"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:6.2-alpine
+        command: [ "redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "$(REDIS_PASSWORD)"  ]
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: '1Gi'
+          limits:
+            cpu: '1'
+            memory: '2Gi'        
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: requirepass
+        ports:
+        - containerPort: 6379
+          name: redis
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /usr/local/etc/redis/redis.conf
+          subPath: redis.conf
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+
