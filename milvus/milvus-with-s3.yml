@@ -1,0 +1,449 @@
+---
+# Source: milvus/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: milvusdb
+data:
+  default.yaml: |+
+    # Copyright (C) 2019-2021 Zilliz. All rights reserved.
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance
+    # with the License. You may obtain a copy of the License at
+    #
+    # http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software distributed under the License
+    # is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+    # or implied. See the License for the specific language governing permissions and limitations under the License.
+    
+    etcd:
+      endpoints:
+        - milvusdb-etcd:2379
+    
+    metastore:
+      type: etcd
+    
+    minio:
+      address: http:/somebucket.s3-website-us-east-1.amazonaws.com/
+      port: 80
+      accessKeyID: someaccesskey
+      secretAccessKey: somesecretkey
+      useSSL: false
+      bucketName: somebucket
+      rootPath: files
+      useIAM: false
+      cloudProvider: aws
+      iamEndpoint: 
+    
+    messageQueue: rocksmq
+    
+    rootCoord:
+      address: localhost
+      port: 53100
+      enableActiveStandby: false  # Enable active-standby
+    
+    proxy:
+      port: 19530
+      internalPort: 19529
+    
+    queryCoord:
+      address: localhost
+      port: 19531
+    
+      enableActiveStandby: false  # Enable active-standby
+    
+    queryNode:
+      port: 21123
+      enableDisk: true # Enable querynode load disk index, and search on disk index
+    
+    indexCoord:
+      address: localhost
+      port: 31000
+      enableActiveStandby: false  # Enable active-standby
+    
+    indexNode:
+      port: 21121
+      enableDisk: true # Enable index node build disk vector index
+    
+    dataCoord:
+      address: localhost
+      port: 13333
+      enableActiveStandby: false  # Enable active-standby
+    
+    dataNode:
+      port: 21124
+    
+    log:
+      level: info
+      file:
+        rootPath: ""
+        maxSize: 300
+        maxAge: 10
+        maxBackups: 20
+      format: text
+  user.yaml: |-
+    #    For example enable rest http for milvus proxy
+    #    proxy:
+    #      http:
+    #        enabled: true
+---
+# Source: milvus/templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: milvusdb
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    helm.sh/chart: milvus-4.0.31
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: milvusdb
+    app.kubernetes.io/version: "2.2.13"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+  - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: 50Gi
+---
+# Source: milvus/charts/etcd/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: milvusdb-etcd-headless
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: etcd
+    helm.sh/chart: etcd-6.3.3
+    app.kubernetes.io/instance: milvusdb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: "client"
+      port: 2379
+      targetPort: client
+    - name: "peer"
+      port: 2380
+      targetPort: peer
+  selector:
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/instance: milvusdb
+---
+# Source: milvus/charts/etcd/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: milvusdb-etcd
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: etcd
+    helm.sh/chart: etcd-6.3.3
+    app.kubernetes.io/instance: milvusdb
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+spec:
+  type: ClusterIP
+  ports:
+    - name: "client"
+      port: 2379
+      targetPort: client
+      nodePort: null
+    - name: "peer"
+      port: 2380
+      targetPort: peer
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: etcd
+    app.kubernetes.io/instance: milvusdb
+---
+# Source: milvus/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: milvusdb
+  labels:
+    helm.sh/chart: milvus-4.0.31
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: milvusdb
+    app.kubernetes.io/version: "2.2.13"
+    app.kubernetes.io/managed-by: Helm
+    component: "standalone"
+spec:
+  type: ClusterIP
+  ports:
+    - name: milvus
+      port: 19530
+      protocol: TCP
+      targetPort: milvus
+    - name: metrics
+      protocol: TCP
+      port: 9091
+      targetPort: metrics
+  selector:
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: milvusdb
+    component: "standalone"
+---
+# Source: milvus/templates/standalone-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: milvusdb-standalone
+  labels:
+    helm.sh/chart: milvus-4.0.31
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: milvusdb
+    app.kubernetes.io/version: "2.2.13"
+    app.kubernetes.io/managed-by: Helm
+    component: "standalone"
+    
+  annotations:
+    
+
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: milvus
+      app.kubernetes.io/instance: milvusdb
+      component: "standalone"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: milvus
+        app.kubernetes.io/instance: milvusdb
+        component: "standalone"
+        
+      annotations:
+        checksum/config: 87307d9971e8182b224e7fee812b0fdd73c47c58b829a50e706abb85b817ce8b
+        
+    spec:
+      serviceAccountName: default
+      initContainers:
+      - name: config
+        command:
+        - /cp
+        - /run-helm.sh,/merge
+        - /milvus/tools/run-helm.sh,/milvus/tools/merge
+        image: "milvusdb/milvus-config-tool:v0.1.1"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /milvus/tools
+          name: tools
+      containers:
+      - name: standalone
+        image: "milvusdb/milvus:v2.2.13"
+        imagePullPolicy: IfNotPresent
+        args: [ "/milvus/tools/run-helm.sh", "milvus", "run", "standalone" ]
+        ports:
+          - name: milvus
+            containerPort: 19530
+            protocol: TCP
+          - name: metrics
+            containerPort: 9091
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: metrics
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: metrics
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+        resources:
+          {}
+        env:
+        volumeMounts:
+        - mountPath: /milvus/tools
+          name: tools
+        - name: milvus-config
+          mountPath: /milvus/configs/default.yaml
+          subPath: default.yaml
+          readOnly: true
+        - name: milvus-config
+          mountPath: /milvus/configs/user.yaml
+          subPath: user.yaml
+          readOnly: true
+        - name: milvus-data-disk
+          mountPath: "/var/lib/milvus"
+          subPath: 
+        - mountPath: /var/lib/milvus/data
+          name: disk
+      nodeSelector:
+        nodegroup: ng-default
+
+      volumes:
+      - emptyDir: {}
+        name: tools
+      - name: milvus-config
+        configMap:
+          name: milvusdb
+      - name: milvus-data-disk
+        persistentVolumeClaim:
+          claimName: milvusdb
+      - name: disk
+        emptyDir: {}
+---
+# Source: milvus/charts/etcd/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: milvusdb-etcd
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: etcd
+    helm.sh/chart: etcd-6.3.3
+    app.kubernetes.io/instance: milvusdb
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: etcd
+      app.kubernetes.io/instance: milvusdb
+  serviceName: milvusdb-etcd-headless
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: etcd
+        helm.sh/chart: etcd-6.3.3
+        app.kubernetes.io/instance: milvusdb
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+    spec:
+      
+      affinity:
+        podAffinity:
+          
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: etcd
+                    app.kubernetes.io/instance: milvusdb
+                namespaces:
+                  - "dev"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+        - name: etcd
+          image: docker.io/milvusdb/etcd:3.5.5-r2
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ETCDCTL_API
+              value: "3"
+            - name: ETCD_ON_K8S
+              value: "yes"
+            - name: ETCD_START_FROM_SNAPSHOT
+              value: "no"
+            - name: ETCD_DISASTER_RECOVERY
+              value: "no"
+            - name: ETCD_NAME
+              value: "$(MY_POD_NAME)"
+            - name: ETCD_DATA_DIR
+              value: "/bitnami/etcd/data"
+            - name: ETCD_LOG_LEVEL
+              value: "info"
+            - name: ALLOW_NONE_AUTHENTICATION
+              value: "yes"
+            - name: ETCD_ADVERTISE_CLIENT_URLS
+              value: "http://$(MY_POD_NAME).milvusdb-etcd-headless.dev.svc.cluster.local:2379"
+            - name: ETCD_LISTEN_CLIENT_URLS
+              value: "http://0.0.0.0:2379"
+            - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+              value: "http://$(MY_POD_NAME).milvusdb-etcd-headless.dev.svc.cluster.local:2380"
+            - name: ETCD_LISTEN_PEER_URLS
+              value: "http://0.0.0.0:2380"
+            - name: ETCD_AUTO_COMPACTION_MODE
+              value: "revision"
+            - name: ETCD_AUTO_COMPACTION_RETENTION
+              value: "1000"
+            - name: ETCD_QUOTA_BACKEND_BYTES
+              value: "4294967296"
+            - name: ETCD_HEARTBEAT_INTERVAL
+              value: "500"
+            - name: ETCD_ELECTION_TIMEOUT
+              value: "2500"
+          envFrom:
+          ports:
+            - name: client
+              containerPort: 2379
+              protocol: TCP
+            - name: peer
+              containerPort: 2380
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /opt/bitnami/scripts/etcd/healthcheck.sh
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - /opt/bitnami/scripts/etcd/healthcheck.sh
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          resources:
+            limits: {}
+            requests: {}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/etcd
+      volumes:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "10Gi"
