@@ -4,6 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: milvusdb
+  namespace: dev
 data:
   default.yaml: |+
     # Copyright (C) 2019-2021 Zilliz. All rights reserved.
@@ -16,64 +17,64 @@ data:
     # Unless required by applicable law or agreed to in writing, software distributed under the License
     # is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
     # or implied. See the License for the specific language governing permissions and limitations under the License.
-    
+
     etcd:
       endpoints:
         - milvusdb-etcd:2379
-    
+
     metastore:
       type: etcd
-    
+
     minio:
-      address: http:/somebucket.s3-website-us-east-1.amazonaws.com/
-      port: 80
-      accessKeyID: someaccesskey
-      secretAccessKey: somesecretkey
-      useSSL: false
-      bucketName: somebucket
+      address: s3.ap-southeast-1.amazonaws.com
+      port: 443
+      accessKeyID: "" #accesseyid
+      secretAccessKey: "" #accesskey
+      useSSL: true
+      region: ap-southeast-1
+      bucketName: ""  #bucketnae
       rootPath: files
       useIAM: false
-      cloudProvider: aws
-      iamEndpoint: 
-    
+      iamEndpoint: ""
+
     messageQueue: rocksmq
-    
+
     rootCoord:
       address: localhost
       port: 53100
       enableActiveStandby: false  # Enable active-standby
-    
+
     proxy:
       port: 19530
       internalPort: 19529
-    
+
     queryCoord:
       address: localhost
       port: 19531
-    
+
       enableActiveStandby: false  # Enable active-standby
-    
+
     queryNode:
       port: 21123
       enableDisk: true # Enable querynode load disk index, and search on disk index
-    
+
     indexCoord:
       address: localhost
       port: 31000
       enableActiveStandby: false  # Enable active-standby
-    
+
     indexNode:
       port: 21121
       enableDisk: true # Enable index node build disk vector index
-    
+
     dataCoord:
       address: localhost
       port: 13333
       enableActiveStandby: false  # Enable active-standby
-    
+
     dataNode:
       port: 21124
-    
+
     log:
       level: info
       file:
@@ -93,6 +94,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: milvusdb
+  namespace: dev
   annotations:
     helm.sh/resource-policy: keep
   labels:
@@ -106,7 +108,7 @@ spec:
   - "ReadWriteOnce"
   resources:
     requests:
-      storage: 50Gi
+      storage: 10Gi
 ---
 # Source: milvus/charts/etcd/templates/svc-headless.yaml
 apiVersion: v1
@@ -168,6 +170,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: milvusdb
+  namespace: dev
   labels:
     helm.sh/chart: milvus-4.0.31
     app.kubernetes.io/name: milvus
@@ -196,6 +199,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: milvusdb-standalone
+  namespace: dev
   labels:
     helm.sh/chart: milvus-4.0.31
     app.kubernetes.io/name: milvus
@@ -203,9 +207,9 @@ metadata:
     app.kubernetes.io/version: "2.2.13"
     app.kubernetes.io/managed-by: Helm
     component: "standalone"
-    
+
   annotations:
-    
+
 
 spec:
   replicas: 1
@@ -222,10 +226,10 @@ spec:
         app.kubernetes.io/name: milvus
         app.kubernetes.io/instance: milvusdb
         component: "standalone"
-        
+
       annotations:
         checksum/config: 87307d9971e8182b224e7fee812b0fdd73c47c58b829a50e706abb85b817ce8b
-        
+
     spec:
       serviceAccountName: default
       initContainers:
@@ -285,11 +289,9 @@ spec:
           readOnly: true
         - name: milvus-data-disk
           mountPath: "/var/lib/milvus"
-          subPath: 
+          subPath:
         - mountPath: /var/lib/milvus/data
           name: disk
-      nodeSelector:
-        nodegroup: ng-default
 
       volumes:
       - emptyDir: {}
@@ -333,10 +335,10 @@ spec:
         app.kubernetes.io/managed-by: Helm
       annotations:
     spec:
-      
+
       affinity:
         podAffinity:
-          
+
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - podAffinityTerm:
@@ -349,7 +351,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
               weight: 1
         nodeAffinity:
-          
+
       securityContext:
         fsGroup: 1001
       serviceAccountName: "default"
