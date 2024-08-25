@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-secrets-sa
+  namespace: external-secrets
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::026090555498:role/external-secrets
+	
+---
+
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: aws-clustersecretstore
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-southeast-1
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: external-secrets-sa	
+            namespace: external-secrets
+---
+
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: redis-secret
+  namespace: dev
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-clustersecretstore
+    kind: ClusterSecretStore
+  target:
+    name: redis-secret
+  data:
+  - secretKey: redis.conf
+    remoteRef:
+      key: redis-secret-dev
